@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.alibaba.android.arouter.launcher.ARouter;
 
 import java.text.MessageFormat;
+import java.util.Locale;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -464,8 +465,11 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
     private LocalWebView createLocalWebView() {
         LocalWebView localWebView = new LocalWebView(mContext);
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.setMarginStart(mContext.getResources().getDimensionPixelSize(R.dimen.material_standard_half));
-        lp.setMarginEnd(mContext.getResources().getDimensionPixelSize(R.dimen.material_standard_half));
+        int horizontalMargin = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
+                PhoneConfiguration.getInstance().getArticleHorizontalMargin(),
+                mContext.getResources().getDisplayMetrics());
+        lp.setMarginStart(horizontalMargin);
+        lp.setMarginEnd(horizontalMargin);
         localWebView.setLayoutParams(lp);
         return localWebView;
     }
@@ -492,10 +496,24 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
                 holder.contentContainer.addView(holder.contentTV);
             }
             holder.contentTV.getWebViewClientEx().setImgUrls(row.getImageUrls());
-            holder.contentTV.loadDataWithBaseURL(null, html, "text/html", "utf-8", null);
+            holder.contentTV.loadDataWithBaseURL(null, applyArticleLineHeight(html), "text/html", "utf-8", null);
         } else {
             holder.contentTextView.setText(row.getContent());
         }
+    }
+
+    private String applyArticleLineHeight(String html) {
+        String style = "<style>body{line-height:"
+                + PhoneConfiguration.getInstance().getArticleLineHeight() + "% !important;}</style>";
+        int headStart = html.toLowerCase(Locale.US).indexOf("<head");
+        if (headStart < 0) {
+            return style + html;
+        }
+        int headEnd = html.indexOf('>', headStart);
+        if (headEnd < 0) {
+            return style + html;
+        }
+        return html.substring(0, headEnd + 1) + style + html.substring(headEnd + 1);
     }
 
     private void onBindDeviceType(ImageView clientBtn, ThreadRowInfo row) {

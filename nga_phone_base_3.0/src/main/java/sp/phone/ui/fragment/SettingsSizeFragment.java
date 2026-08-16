@@ -40,6 +40,8 @@ public class SettingsSizeFragment extends BaseFragment implements  SignSeekBar.O
         initFontSizeView(rootView);
         initAvatarSizeView(rootView);
         initWebFontSizeView(rootView);
+        initArticleLineHeightView(rootView);
+        initArticleHorizontalMarginView(rootView);
         initEmotionSizeView(rootView);
 
     }
@@ -83,6 +85,28 @@ public class SettingsSizeFragment extends BaseFragment implements  SignSeekBar.O
         seekBar.setOnProgressChangedListener(this);
     }
 
+    private void initArticleLineHeightView(View rootView) {
+        SeekBarEx seekBar = rootView.findViewById(R.id.seek_article_line_height);
+        seekBar.getConfigBuilder()
+                .max(Constants.ARTICLE_LINE_HEIGHT_MAX)
+                .min(Constants.ARTICLE_LINE_HEIGHT_MIN)
+                .progress(mConfiguration.getArticleLineHeight())
+                .sectionCount(Constants.ARTICLE_LINE_HEIGHT_MAX - Constants.ARTICLE_LINE_HEIGHT_MIN)
+                .build();
+        seekBar.setOnProgressChangedListener(this);
+    }
+
+    private void initArticleHorizontalMarginView(View rootView) {
+        SeekBarEx seekBar = rootView.findViewById(R.id.seek_article_horizontal_margin);
+        seekBar.getConfigBuilder()
+                .max(Constants.ARTICLE_HORIZONTAL_MARGIN_MAX)
+                .min(Constants.ARTICLE_HORIZONTAL_MARGIN_MIN)
+                .progress(mConfiguration.getArticleHorizontalMargin())
+                .sectionCount(Constants.ARTICLE_HORIZONTAL_MARGIN_MAX - Constants.ARTICLE_HORIZONTAL_MARGIN_MIN)
+                .build();
+        seekBar.setOnProgressChangedListener(this);
+    }
+
     private void initEmotionSizeView(View rootView) {
         SeekBarEx seekBar = rootView.findViewById(R.id.seek_emoticon);
         int max = Constants.EMOTICON_SIZE_MAX;
@@ -121,6 +145,12 @@ public class SettingsSizeFragment extends BaseFragment implements  SignSeekBar.O
                 break;
             case R.id.seek_web_size:
                 mConfiguration.setWebViewTextZoom(progress);
+                break;
+            case R.id.seek_article_line_height:
+                mConfiguration.setArticleLineHeight(progress);
+                break;
+            case R.id.seek_article_horizontal_margin:
+                mConfiguration.setArticleHorizontalMargin(progress);
                 break;
             default:
                 break;

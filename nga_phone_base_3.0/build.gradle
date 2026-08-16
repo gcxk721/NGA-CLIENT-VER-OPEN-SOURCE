@@ -64,7 +64,7 @@ android {
     buildTypes {
         release {
             applicationIdSuffix '.community'
-            versionNameSuffix '-community.1'
+            versionNameSuffix '-community.2'
             debuggable false
             jniDebuggable false
             renderscriptDebuggable false
