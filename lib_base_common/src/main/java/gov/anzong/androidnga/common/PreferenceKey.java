@@ -95,6 +95,8 @@ public class PreferenceKey {
 
     public static final String KEY_ARTICLE_HORIZONTAL_MARGIN = "key_article_horizontal_margin";
 
+    public static final String KEY_ARTICLE_LETTER_SPACING = "key_article_letter_spacing";
+
     public static final String KEY_PRELOAD_BOARD_VERSION = "key_preload_board_version";
 
     public static final String KEY_LOAD_AVATAR_STRATEGY = "pref_load_avatar_strategy";

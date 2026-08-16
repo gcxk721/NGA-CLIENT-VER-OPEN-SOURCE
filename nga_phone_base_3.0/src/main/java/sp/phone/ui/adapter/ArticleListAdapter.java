@@ -496,15 +496,18 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
                 holder.contentContainer.addView(holder.contentTV);
             }
             holder.contentTV.getWebViewClientEx().setImgUrls(row.getImageUrls());
-            holder.contentTV.loadDataWithBaseURL(null, applyArticleLineHeight(html), "text/html", "utf-8", null);
+            holder.contentTV.loadDataWithBaseURL(null, applyArticleTextStyle(html), "text/html", "utf-8", null);
         } else {
+            holder.contentTextView.setLetterSpacing(PhoneConfiguration.getInstance().getArticleLetterSpacing() / 100f);
             holder.contentTextView.setText(row.getContent());
         }
     }
 
-    private String applyArticleLineHeight(String html) {
-        String style = "<style>body{line-height:"
-                + PhoneConfiguration.getInstance().getArticleLineHeight() + "% !important;}</style>";
+    private String applyArticleTextStyle(String html) {
+        PhoneConfiguration configuration = PhoneConfiguration.getInstance();
+        String style = "<style>body{line-height:" + configuration.getArticleLineHeight()
+                + "% !important;letter-spacing:" + (configuration.getArticleLetterSpacing() / 100f)
+                + "em !important;}</style>";
         int headStart = html.toLowerCase(Locale.US).indexOf("<head");
         if (headStart < 0) {
             return style + html;

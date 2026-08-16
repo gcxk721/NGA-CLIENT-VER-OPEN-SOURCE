@@ -32,4 +32,9 @@ public class Constants {
     public static final int ARTICLE_HORIZONTAL_MARGIN_DEFAULT = 4;
     public static final int ARTICLE_HORIZONTAL_MARGIN_MIN = 1;
     public static final int ARTICLE_HORIZONTAL_MARGIN_MAX = 32;
+
+    public static final int ARTICLE_LETTER_SPACING_DEFAULT = 0;
+    public static final int ARTICLE_LETTER_SPACING_MIN = 0;
+    public static final int ARTICLE_LETTER_SPACING_MAX = 20;
+    public static final int ARTICLE_LETTER_SPACING_PROGRESS_OFFSET = 1;
 }

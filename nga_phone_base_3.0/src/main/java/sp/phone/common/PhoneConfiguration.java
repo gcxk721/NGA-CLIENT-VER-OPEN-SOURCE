@@ -206,6 +206,14 @@ public class PhoneConfiguration extends PreferenceKey implements SharedPreferenc
         PreferenceUtils.putData(PreferenceKey.KEY_ARTICLE_HORIZONTAL_MARGIN, margin);
     }
 
+    public int getArticleLetterSpacing() {
+        return PreferenceUtils.getData(PreferenceKey.KEY_ARTICLE_LETTER_SPACING, Constants.ARTICLE_LETTER_SPACING_DEFAULT);
+    }
+
+    public void setArticleLetterSpacing(int letterSpacing) {
+        PreferenceUtils.putData(PreferenceKey.KEY_ARTICLE_LETTER_SPACING, letterSpacing);
+    }
+
     public boolean useSolidColorBackground() {
         return ContextUtils.getSharedPreferences(PreferenceKey.PERFERENCE).getBoolean(PreferenceKey.KEY_USE_SOLID_COLOR_BG, true);
     }
