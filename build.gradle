@@ -48,7 +48,7 @@ project.ext {
     targetSdkVersion = 35
     compileSdkVersion = 35
     appVersionName = '4.2.2'
-    appVersionCode = 4024
+    appVersionCode = 4025
 
     rxAndroid = '2.1.1'
 

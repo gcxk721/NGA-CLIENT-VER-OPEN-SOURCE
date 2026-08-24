@@ -1,21 +1,34 @@
 package sp.phone.ui.adapter;
 
 import android.app.Activity;
+import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.view.Gravity;
+import android.view.KeyEvent;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.FragmentManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.ui.AspectRatioFrameLayout;
+import androidx.media3.ui.PlayerView;
 
 import com.alibaba.android.arouter.launcher.ARouter;
 
@@ -34,6 +47,7 @@ import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.schedulers.Schedulers;
 import sp.phone.common.PhoneConfiguration;
 import sp.phone.common.UserManagerImpl;
+import sp.phone.http.bean.Attachment;
 import sp.phone.http.bean.ThreadData;
 import sp.phone.http.bean.ThreadRowInfo;
 import sp.phone.rxjava.BaseSubscriber;
@@ -76,6 +90,9 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
     private LocalWebView[] mLocalWebViews = new LocalWebView[20];
 
     private String mTopicOwner;
+
+    private ExoPlayer mPlayingPlayer;
+    private Dialog mVideoDialog;
 
     private View.OnClickListener mOnClientClickListener = new View.OnClickListener() {
         @Override
@@ -324,6 +341,9 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
         @BindView(R.id.wv_container)
         FrameLayout contentContainer;
 
+        @BindView(R.id.video_container)
+        LinearLayout videoContainer;
+
         @BindView(R.id.tv_floor)
         TextView floorTv;
 
@@ -450,6 +470,7 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
         onBindAvatarView(holder.avatarIv, row);
         onBindDeviceType(holder.clientIv, row);
         onBindContentView(holder, row, position);
+        onBindVideoAttachments(holder.videoContainer, row);
 
         int fgColor = mThemeManager.getAccentColor(mContext);
         FunctionUtils.handleNickName(row, fgColor, holder.nickNameTV, mTopicOwner, mContext);
@@ -500,6 +521,146 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
         } else {
             holder.contentTextView.setLetterSpacing(PhoneConfiguration.getInstance().getArticleLetterSpacing() / 100f);
             holder.contentTextView.setText(row.getContent());
+        }
+    }
+
+    private void onBindVideoAttachments(LinearLayout container, ThreadRowInfo row) {
+        container.removeAllViews();
+        if (row.getAttachs() == null) {
+            container.setVisibility(View.GONE);
+            return;
+        }
+
+        boolean hasVideo = false;
+        for (Attachment attachment : row.getAttachs().values()) {
+            if (attachment == null || !isVideoAttachment(attachment)) {
+                continue;
+            }
+            hasVideo = true;
+            addVideoCard(container, getAttachmentUrl(row, attachment));
+        }
+        container.setVisibility(hasVideo ? View.VISIBLE : View.GONE);
+    }
+
+    private boolean isVideoAttachment(Attachment attachment) {
+        String extension = attachment.getExt();
+        if (!TextUtils.isEmpty(extension) && "mp4".equalsIgnoreCase(extension)) {
+            return true;
+        }
+        String url = attachment.getAttachurl();
+        if (TextUtils.isEmpty(url)) {
+            return false;
+        }
+        int queryStart = url.indexOf('?');
+        String path = queryStart >= 0 ? url.substring(0, queryStart) : url;
+        return path.toLowerCase(Locale.US).endsWith(".mp4");
+    }
+
+    private String getAttachmentUrl(ThreadRowInfo row, Attachment attachment) {
+        return "http://" + row.attachmentHost + "/attachments/" + attachment.getAttachurl();
+    }
+
+    private void addVideoCard(LinearLayout container, final String url) {
+        TextView playButton = new TextView(mContext);
+        playButton.setText("▶ 播放视频");
+        playButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        int padding = getVideoCardPadding();
+        playButton.setPadding(padding, padding, padding, padding);
+        playButton.setBackgroundResource(android.R.drawable.btn_default);
+        playButton.setOnClickListener(v -> playFullscreenVideo(url));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = padding / 2;
+        container.addView(playButton, params);
+
+        TextView openInBrowser = new TextView(mContext);
+        openInBrowser.setText("浏览器打开");
+        openInBrowser.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        openInBrowser.setPadding(0, padding / 2, 0, padding / 2);
+        openInBrowser.setOnClickListener(v -> openVideoInBrowser(url));
+        container.addView(openInBrowser);
+    }
+
+    private int getVideoCardPadding() {
+        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 12,
+                mContext.getResources().getDisplayMetrics());
+    }
+
+    private void playFullscreenVideo(final String url) {
+        releaseVideo();
+        final Dialog dialog = new Dialog(mContext, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        PlayerView playerView = new PlayerView(mContext);
+        playerView.setUseController(true);
+        playerView.setControllerAutoShow(true);
+        playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+        FrameLayout dialogContent = new FrameLayout(mContext);
+        dialogContent.addView(playerView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        ImageButton closeButton = new ImageButton(mContext);
+        closeButton.setContentDescription("关闭视频");
+        closeButton.setBackgroundColor(Color.TRANSPARENT);
+        closeButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
+        int closeButtonSize = getVideoCardPadding() * 4;
+        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(closeButtonSize, closeButtonSize,
+                Gravity.TOP | Gravity.START);
+        dialogContent.addView(closeButton, closeParams);
+        closeButton.setOnClickListener(v -> dialog.dismiss());
+        dialog.setContentView(dialogContent);
+
+        final ExoPlayer player = new ExoPlayer.Builder(mContext).build();
+        playerView.setPlayer(player);
+        mPlayingPlayer = player;
+        mVideoDialog = dialog;
+        player.addListener(new Player.Listener() {
+            @Override
+            public void onPlayerError(PlaybackException error) {
+                if (player == mPlayingPlayer) {
+                    ActivityUtils.showToast("视频播放失败");
+                    dialog.dismiss();
+                }
+            }
+        });
+        dialog.setOnDismissListener(d -> {
+            if (mVideoDialog == dialog) {
+                mVideoDialog = null;
+                mPlayingPlayer = null;
+                player.release();
+            }
+        });
+        dialog.setOnKeyListener((d, keyCode, event) -> {
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
+                dialog.dismiss();
+                return true;
+            }
+            return false;
+        });
+        dialog.show();
+        player.setMediaItem(MediaItem.fromUri(Uri.parse(url)));
+        player.prepare();
+        player.play();
+    }
+
+    private void openVideoInBrowser(String url) {
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+        mContext.startActivity(intent);
+    }
+
+    public void releaseVideo() {
+        Dialog dialog = mVideoDialog;
+        ExoPlayer player = mPlayingPlayer;
+        mVideoDialog = null;
+        mPlayingPlayer = null;
+        if (dialog != null && dialog.isShowing()) {
+            dialog.dismiss();
+        }
+        if (player != null) {
+            player.release();
+        }
+    }
+
+    public void pauseVideo() {
+        if (mPlayingPlayer != null) {
+            mPlayingPlayer.pause();
         }
     }
 

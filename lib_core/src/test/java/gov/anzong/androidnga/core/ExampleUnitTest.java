@@ -12,8 +12,12 @@ import org.junit.Test;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.Collections;
 
 import gov.anzong.androidnga.base.util.ContextUtils;
+import gov.anzong.androidnga.core.corebuild.HtmlAttachmentBuilder;
+import gov.anzong.androidnga.core.data.AttachmentData;
 import gov.anzong.androidnga.core.data.HtmlData;
 import gov.anzong.androidnga.core.decode.ForumBasicDecoder;
 
@@ -54,6 +58,25 @@ public class ExampleUnitTest {
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
         }
+    }
+
+    @Test
+    public void videoAttachmentIsHandledOutsideWebView() {
+        AttachmentData attachment = new AttachmentData();
+        attachment.setAttachUrl("20260817/test_video.MP4");
+        attachment.setAttachmentHost("img.ngacn.cc");
+
+        HtmlData data = createHtmlData();
+        data.setAttachmentList(Collections.singletonList(attachment));
+
+        CharSequence html = new HtmlAttachmentBuilder().build(data, new ArrayList<>());
+        assertEquals("", html.toString());
+    }
+
+    @Test
+    public void videoFlashTagIsNotShownAsPlainText() {
+        String content = "[flash]./mon_202608/17/test.mp4[/flash]";
+        assertEquals("", new ForumBasicDecoder().decode(content, createHtmlData()));
     }
 
     private static class TestApplication extends Application {
