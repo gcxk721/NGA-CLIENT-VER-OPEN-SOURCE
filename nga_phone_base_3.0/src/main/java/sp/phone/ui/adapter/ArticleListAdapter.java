@@ -14,6 +14,9 @@ import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.WebChromeClient;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.ImageButton;
@@ -33,7 +36,11 @@ import androidx.media3.ui.PlayerView;
 import com.alibaba.android.arouter.launcher.ARouter;
 
 import java.text.MessageFormat;
+import java.util.LinkedHashSet;
 import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
@@ -77,6 +84,12 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
 
     private static final int VIEW_TYPE_NATIVE_VIEW = 1;
 
+    private static final Pattern FLASH_VIDEO_PATTERN = Pattern.compile(
+            "\\[flash(?:=video)?\\]([^\\[]+)\\[/flash\\]", Pattern.CASE_INSENSITIVE);
+
+    private static final Pattern BILIBILI_VIDEO_PATTERN = Pattern.compile(
+            "/video/(BV[0-9a-z]+|av[0-9]+)", Pattern.CASE_INSENSITIVE);
+
     private Context mContext;
 
     private FragmentManager mFragmentManager;
@@ -93,6 +106,7 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
 
     private ExoPlayer mPlayingPlayer;
     private Dialog mVideoDialog;
+    private WebView mVideoWebView;
 
     private View.OnClickListener mOnClientClickListener = new View.OnClickListener() {
         @Override
@@ -526,20 +540,30 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
 
     private void onBindVideoAttachments(LinearLayout container, ThreadRowInfo row) {
         container.removeAllViews();
-        if (row.getAttachs() == null) {
-            container.setVisibility(View.GONE);
-            return;
+
+        Set<String> videoUrls = new LinkedHashSet<>();
+        if (row.getAttachs() != null) {
+            for (Attachment attachment : row.getAttachs().values()) {
+                if (attachment != null && isVideoAttachment(attachment)) {
+                    videoUrls.add(getAttachmentUrl(row, attachment));
+                }
+            }
         }
 
-        boolean hasVideo = false;
-        for (Attachment attachment : row.getAttachs().values()) {
-            if (attachment == null || !isVideoAttachment(attachment)) {
-                continue;
+        if (!TextUtils.isEmpty(row.getContent())) {
+            Matcher matcher = FLASH_VIDEO_PATTERN.matcher(row.getContent());
+            while (matcher.find()) {
+                String url = normalizeFlashVideoUrl(row, matcher.group(1));
+                if (!TextUtils.isEmpty(url)) {
+                    videoUrls.add(url);
+                }
             }
-            hasVideo = true;
-            addVideoCard(container, getAttachmentUrl(row, attachment));
         }
-        container.setVisibility(hasVideo ? View.VISIBLE : View.GONE);
+
+        for (String url : videoUrls) {
+            addVideoCard(container, url);
+        }
+        container.setVisibility(videoUrls.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     private boolean isVideoAttachment(Attachment attachment) {
@@ -551,9 +575,65 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
         if (TextUtils.isEmpty(url)) {
             return false;
         }
-        int queryStart = url.indexOf('?');
-        String path = queryStart >= 0 ? url.substring(0, queryStart) : url;
-        return path.toLowerCase(Locale.US).endsWith(".mp4");
+        return isDirectVideoUrl(url);
+    }
+
+    private String normalizeFlashVideoUrl(ThreadRowInfo row, String value) {
+        String url = value == null ? null : value.trim().replace("&amp;", "&");
+        if (TextUtils.isEmpty(url)) {
+            return null;
+        }
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            return isDirectVideoUrl(url) || isSupportedWebVideoUrl(url) ? url : null;
+        }
+        if (!isDirectVideoUrl(url) || TextUtils.isEmpty(row.attachmentHost)) {
+            return null;
+        }
+        if (url.startsWith("./")) {
+            url = url.substring(2);
+        } else if (url.startsWith("/")) {
+            url = url.substring(1);
+        }
+        return "http://" + row.attachmentHost + "/attachments/" + url;
+    }
+
+    private boolean isDirectVideoUrl(String url) {
+        String path = Uri.parse(url).getPath();
+        return path != null && path.toLowerCase(Locale.US).endsWith(".mp4");
+    }
+
+    private boolean isSupportedWebVideoUrl(String url) {
+        String host = Uri.parse(url).getHost();
+        if (host == null) {
+            return false;
+        }
+        host = host.toLowerCase(Locale.US);
+        return host.equals("weibo.com") || host.endsWith(".weibo.com")
+                || host.equals("weibo.cn") || host.endsWith(".weibo.cn")
+                || host.equals("bilibili.com") || host.endsWith(".bilibili.com")
+                || host.equals("b23.tv") || host.endsWith(".b23.tv");
+    }
+
+    private String getWebVideoPlayerUrl(String url) {
+        Uri uri = Uri.parse(url);
+        String host = uri.getHost();
+        if (host == null || !(host.equalsIgnoreCase("bilibili.com")
+                || host.toLowerCase(Locale.US).endsWith(".bilibili.com"))) {
+            return url;
+        }
+        String path = uri.getPath();
+        if (TextUtils.isEmpty(path)) {
+            return url;
+        }
+        Matcher matcher = BILIBILI_VIDEO_PATTERN.matcher(path);
+        if (!matcher.find()) {
+            return url;
+        }
+        String videoId = matcher.group(1);
+        if (videoId.regionMatches(true, 0, "BV", 0, 2)) {
+            return "https://player.bilibili.com/player.html?bvid=" + videoId + "&autoplay=1";
+        }
+        return "https://player.bilibili.com/player.html?aid=" + videoId.substring(2) + "&autoplay=1";
     }
 
     private String getAttachmentUrl(ThreadRowInfo row, Attachment attachment) {
@@ -587,6 +667,10 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
     }
 
     private void playFullscreenVideo(final String url) {
+        if (isSupportedWebVideoUrl(url)) {
+            playFullscreenWebVideo(url);
+            return;
+        }
         releaseVideo();
         final Dialog dialog = new Dialog(mContext, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
         PlayerView playerView = new PlayerView(mContext);
@@ -640,6 +724,53 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
         player.play();
     }
 
+    private void playFullscreenWebVideo(final String url) {
+        releaseVideo();
+        final Dialog dialog = new Dialog(mContext, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        WebView webView = new WebView(mContext);
+        webView.setBackgroundColor(Color.BLACK);
+        webView.getSettings().setJavaScriptEnabled(true);
+        webView.getSettings().setDomStorageEnabled(true);
+        webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
+        webView.setWebViewClient(new WebViewClient());
+        webView.setWebChromeClient(new WebChromeClient());
+
+        FrameLayout dialogContent = new FrameLayout(mContext);
+        dialogContent.addView(webView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        ImageButton closeButton = new ImageButton(mContext);
+        closeButton.setContentDescription("关闭视频");
+        closeButton.setBackgroundColor(Color.TRANSPARENT);
+        closeButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
+        int closeButtonSize = getVideoCardPadding() * 4;
+        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(closeButtonSize, closeButtonSize,
+                Gravity.TOP | Gravity.START);
+        dialogContent.addView(closeButton, closeParams);
+        closeButton.setOnClickListener(v -> dialog.dismiss());
+        dialog.setContentView(dialogContent);
+
+        mVideoDialog = dialog;
+        mVideoWebView = webView;
+        dialog.setOnDismissListener(d -> {
+            if (mVideoDialog == dialog) {
+                mVideoDialog = null;
+                mVideoWebView = null;
+                webView.stopLoading();
+                webView.loadUrl("about:blank");
+                webView.destroy();
+            }
+        });
+        dialog.setOnKeyListener((d, keyCode, event) -> {
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
+                dialog.dismiss();
+                return true;
+            }
+            return false;
+        });
+        dialog.show();
+        webView.loadUrl(getWebVideoPlayerUrl(url));
+    }
+
     private void openVideoInBrowser(String url) {
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
         mContext.startActivity(intent);
@@ -648,19 +779,29 @@ public class ArticleListAdapter extends RecyclerView.Adapter<ArticleListAdapter.
     public void releaseVideo() {
         Dialog dialog = mVideoDialog;
         ExoPlayer player = mPlayingPlayer;
+        WebView webView = mVideoWebView;
         mVideoDialog = null;
         mPlayingPlayer = null;
+        mVideoWebView = null;
         if (dialog != null && dialog.isShowing()) {
             dialog.dismiss();
         }
         if (player != null) {
             player.release();
         }
+        if (webView != null) {
+            webView.stopLoading();
+            webView.loadUrl("about:blank");
+            webView.destroy();
+        }
     }
 
     public void pauseVideo() {
         if (mPlayingPlayer != null) {
             mPlayingPlayer.pause();
+        }
+        if (mVideoWebView != null) {
+            mVideoWebView.onPause();
         }
     }
 

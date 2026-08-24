@@ -79,6 +79,24 @@ public class ExampleUnitTest {
         assertEquals("", new ForumBasicDecoder().decode(content, createHtmlData()));
     }
 
+    @Test
+    public void directVideoFlashTagWithQueryIsHandledOutsideWebView() {
+        String content = "[flash]https://img.example.com/test.mp4?duration=3[/flash]";
+        assertEquals("", new ForumBasicDecoder().decode(content, createHtmlData()));
+    }
+
+    @Test
+    public void weiboVideoFlashTagIsHandledOutsideWebView() {
+        String content = "[flash]https://weibo.com/1638620395/ReRTVyZWl[/flash]";
+        assertEquals("", new ForumBasicDecoder().decode(content, createHtmlData()));
+    }
+
+    @Test
+    public void bilibiliVideoFlashTagIsHandledOutsideWebView() {
+        String content = "[flash]https://www.bilibili.com/video/BV1X88Y6dEQB[/flash]";
+        assertEquals("", new ForumBasicDecoder().decode(content, createHtmlData()));
+    }
+
     private static class TestApplication extends Application {
         private final Resources resources = new TestResources();
 
